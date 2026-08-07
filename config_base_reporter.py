@@ -18,6 +18,14 @@ STARTING_CAPITAL_PER_SYSTEM = 3000.0     # GBP deployed per system at K1 go-live
 POLL_INTERVAL_SEC = 30
 FETCH_TIMEOUT_SEC = 5
 
+# Daily-summary Pushover (brief Part 5): the reporter aggregates all instruments into ONE 21:00 UTC
+# message. LIVE_NOTIFICATIONS + Pushover creds come from .env (per-machine). On the production Dell
+# reporter (pointed at K1) set LIVE_NOTIFICATIONS=True; a pure paper reporter stays False (silent).
+LIVE_NOTIFICATIONS     = os.getenv("LIVE_NOTIFICATIONS", "False").strip().lower() in ("1", "true", "yes", "on")
+PUSHOVER_USER_KEY      = os.getenv("PUSHOVER_USER_KEY", "")
+PUSHOVER_API_TOKEN     = os.getenv("PUSHOVER_API_TOKEN", "")
+DAILY_SUMMARY_HOUR_UTC = 21
+
 # Poll host. Set ALBIONBASE_K1_HOST to the K1 Tailscale IP (100.x.x.x) in production. Until K1/Tailscale
 # is up it defaults to localhost, so the reporter reads the DELL paper systems as a live stand-in.
 _HOST = os.getenv("ALBIONBASE_K1_HOST", "127.0.0.1")

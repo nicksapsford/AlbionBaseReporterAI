@@ -20,6 +20,7 @@ from flask import Flask, Response
 from config_base_reporter import (
     ALBIONBASE_INSTRUMENTS, PORT, GO_LIVE_DATE, STARTING_CAPITAL_PER_SYSTEM,
     FETCH_TIMEOUT_SEC, state_url, log_path,
+    LIVE_NOTIFICATIONS, PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN, DAILY_SUMMARY_HOUR_UTC,
 )
 
 _VER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
@@ -453,6 +454,39 @@ def gaius_data():
     return out
 
 
+# ── daily summary Pushover (brief Part 5: ONE 21:00 UTC message across all instruments) ────────
+def _pushover_send(title, message):
+    if not LIVE_NOTIFICATIONS or not PUSHOVER_USER_KEY or not PUSHOVER_API_TOKEN:
+        return False
+    try:
+        import urllib.parse
+        data = urllib.parse.urlencode({"token": PUSHOVER_API_TOKEN, "user": PUSHOVER_USER_KEY,
+                                       "title": title, "message": message}).encode()
+        urllib.request.urlopen("https://api.pushover.net/1/messages.json", data=data, timeout=6)
+        return True
+    except Exception:
+        return False
+
+def build_daily_summary():
+    rows, portfolio, _ = build_report()
+    lines = ["%s %-5s %s" % (r["emoji"], r["name"], _money(r["today"], plus=True)) for r in rows]
+    lines.append("TODAY:   " + _money(portfolio["today"], plus=True))
+    lines.append("BALANCE: " + _money(portfolio["total_balance"]))
+    return "AlbionBase Daily -- " + _money(portfolio["today"], plus=True), "\n".join(lines)
+
+def _daily_summary_scheduler():
+    import time
+    last = None
+    while True:
+        try:
+            now = datetime.now(timezone.utc); key = now.strftime("%Y-%m-%d")
+            if now.hour == DAILY_SUMMARY_HOUR_UTC and last != key:
+                t, m = build_daily_summary(); _pushover_send(t, m); last = key
+        except Exception:
+            pass
+        time.sleep(30)
+
+
 # ── routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
@@ -491,6 +525,11 @@ def monitor():
 def api_gaius():
     return Response(json.dumps(gaius_data(), default=str, indent=2), mimetype="application/json")
 
+@app.route("/api/daily-summary")
+def api_daily_summary():
+    t, m = build_daily_summary()
+    return Response(json.dumps({"title": t, "message": m}), mimetype="application/json")
+
 @app.route("/<slug>")
 def instrument_page(slug):
     inst = find_instrument(slug)
@@ -500,5 +539,7 @@ def instrument_page(slug):
 
 
 if __name__ == "__main__":
+    import threading
+    threading.Thread(target=_daily_summary_scheduler, daemon=True).start()   # 21:00 UTC daily Pushover
     print("AlbionBase Reporter v%s -- Command Centre on http://localhost:%d" % (VERSION, PORT))
     app.run(host="0.0.0.0", port=PORT, threaded=True)
