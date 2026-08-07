@@ -18,19 +18,24 @@ _Port 5041 (5040 is held by a Windows svchost — WSAEACCES, confirmed 7 Aug 202
   (defaults to `127.0.0.1`, so the reporter reads the **Dell** systems until K1/Tailscale is up).
 - `ALBIONBASE_LOGS_BASE` — where the trade CSVs live (Dell repos now; Tailscale share on K1).
 
-## Status (7 Aug 2026)
-**BUILT + verified against the live Dell systems (Page 1).**
-- `dashboard_base_reporter.py` — Page 1 Command Centre on :5041. Polls `/api/state` (HTTP, 5s timeout,
-  graceful `OFFLINE`/cached fallback) + reads each trade CSV for WR/PF/net. Routes: `/`, `/api/systems`,
-  `/api/health`. Auto-refresh 30s.
-- Verified: 4/4 systems online, portfolio + per-system live status + performance table render correctly.
+## Status (7 Aug 2026) -- v1.1.0
+**BUILT + verified against the live Dell systems. All reporting pages done.**
+`dashboard_base_reporter.py` on :5041 (Flask). Polls `/api/state` (5s timeout, graceful `OFFLINE`/cached
+fallback) + reads each trade CSV. Pages/routes:
+- `/` -- **Page 1 Command Centre**: portfolio + per-system live status + performance table + nav.
+- `/gold /oil /ftse /us500` -- **Page 2 instrument detail**: position, performance, compounding tracker,
+  recent 10 trades, two-speed status (Gold). Prefix routing (`/us` works). Add an instrument = one config dict.
+- `/performance` -- **Page 3**: overall, by-instrument, by-week (ISO), by-month, max drawdown, compounding.
+- `/archie-brief` -- **Page 5**: pasteable brief (portfolio, open positions, performance, alerts) + copy button.
+- `/monitor` -- **Page 4**: links the :5015 System Monitor (K1 metrics via Tailscale Phase 2).
+- `/api/gaius-data` -- **Part 4**: full per-instrument trades + summaries + portfolio JSON for Gaius/Cody.
+- `/api/systems`, `/api/health`.
+Verified: all routes HTTP 200, data reads correctly from the 4 live systems.
 
 ## Staged (not yet built)
-- Individual instrument pages `/gold /oil /ftse /us` (Page 2), `/performance` (Page 3), `/monitor`
-  (Page 4, links :5015), `/archie-brief` (Page 5), `/api/gaius-data` (Part 4).
-- Shutdown controls → K1 `/api/shutdown` via Tailscale (rendered disabled until K1 live).
+- Shutdown controls -> K1 `/api/shutdown` via Tailscale (rendered disabled until K1 live).
 - main/watchdog split (3-process convention); START_ALBIONBASE.bat entry.
-- **Compounding position sizing + LIVE_NOTIFICATIONS** live in the *trading* repos, not here.
+- **Compounding position sizing + LIVE_NOTIFICATIONS** are DONE, but live in the *trading* repos, not here.
 
 ## Architecture decisions (pending Nick confirmation)
 - Per-machine flags (`USE_COMPOUNDING`, `LIVE_NOTIFICATIONS`) via **`.env`**, safe paper defaults.

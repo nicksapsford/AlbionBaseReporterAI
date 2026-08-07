@@ -182,6 +182,7 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
 </style></head><body>
 <h1>\U0001F3DB️ ALBIONBASE COMMAND CENTRE</h1>
 <div class="sub">Generated {now} UTC &nbsp;|&nbsp; Live system: ACEMAGIC K1 {k1} &nbsp;|&nbsp; Reporter v{ver} (:{port}) &nbsp;|&nbsp; go-live {golive}</div>
+{nav}
 
 <div class="card"><h2>Portfolio</h2>
   <div class="grid">
@@ -216,7 +217,240 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
         sys_rows=sys_rows, perf_rows=perf_rows,
         tot_trades=tot_perf["trades"], tot_net=_money(tot_perf["net"], plus=True),
         ncls=("pos" if tot_perf["net"] >= 0 else "neg"), controls=controls, port=PORT,
+        nav=_nav("home"),
     )
+
+
+# ── extended pages (Part 3 pages 2/3/5) + Gaius feed (Part 4) ─────────────────
+_CSS = """
+body{background:#0d1117;color:#c9d1d9;font-family:'Consolas','Courier New',monospace;margin:0;padding:20px;}
+h1{color:#e0b020;font-size:20px;margin:0 0 4px;} .sub{color:#8b949e;font-size:12px;margin-bottom:12px;}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px 18px;margin-bottom:16px;}
+.card h2{font-size:12px;letter-spacing:1px;color:#8b949e;margin:0 0 10px;text-transform:uppercase;}
+table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #21262d;}
+th{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;} .num{text-align:right;font-variant-numeric:tabular-nums;}
+.pos{color:#3fb950;} .neg{color:#f85149;} .mut{color:#6e7681;font-size:11px;}
+.live{color:#3fb950;font-weight:700;} .off{color:#f85149;font-weight:700;} .cache{color:#d29922;font-weight:700;}
+.long{color:#3fb950;font-weight:700;} .short{color:#f85149;font-weight:700;} .flat{color:#8b949e;}
+.big{font-size:22px;color:#e6edf3;} .kv{margin-right:26px;display:inline-block;vertical-align:top;} .kv .l{color:#8b949e;font-size:11px;} .kv .v{font-size:15px;}
+.nav{margin-bottom:16px;font-size:12px;} .nav a{color:#58a6ff;text-decoration:none;margin-right:14px;} .nav a.on{color:#e0b020;font-weight:700;}
+.costs{color:#3fb950;font-weight:700;} pre{white-space:pre-wrap;font-family:inherit;font-size:12px;color:#c9d1d9;margin:0;}
+button.copy{background:#21262d;color:#58a6ff;border:1px solid #30363d;border-radius:6px;padding:6px 12px;font-family:inherit;cursor:pointer;margin-top:8px;}
+"""
+
+def _cls(v): return "pos" if (v or 0) >= 0 else "neg"
+def _slug(inst): return inst["name"].lower()
+
+def _nav(active=""):
+    a = ['<a href="/" %s>Command Centre</a>' % ('class="on"' if active == "home" else "")]
+    for inst in ALBIONBASE_INSTRUMENTS:
+        s = _slug(inst)
+        a.append('<a href="/%s" %s>%s %s</a>' % (s, 'class="on"' if active == s else "", inst["emoji"], inst["name"]))
+    a.append('<a href="/performance" %s>Performance</a>' % ('class="on"' if active == "perf" else ""))
+    a.append('<a href="/archie-brief" %s>Archie Brief</a>' % ('class="on"' if active == "brief" else ""))
+    a.append('<a href="/monitor" %s>Monitor</a>' % ('class="on"' if active == "mon" else ""))
+    return '<div class="nav">' + " ".join(a) + '</div>'
+
+def _shell(title, body, active=""):
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return ("<!doctype html><html><head><meta charset='utf-8'><title>" + title + "</title>"
+            "<meta http-equiv='refresh' content='60'><style>" + _CSS + "</style></head><body>"
+            "<h1>" + title + "</h1><div class='sub'>Generated " + now + " UTC | AlbionBase Reporter v" + VERSION + "</div>"
+            + _nav(active) + body + "</body></html>")
+
+def _num(row, *keys):
+    for k in keys:
+        v = row.get(k)
+        if v not in (None, ""):
+            try: return float(v)
+            except (TypeError, ValueError): pass
+    return None
+
+def read_trades(inst):
+    """Full normalised trade rows (oldest->newest). [] if the CSV is missing/unreadable."""
+    out = []
+    try:
+        with open(log_path(inst), newline="", encoding="utf-8", errors="replace") as f:
+            for r in csv.DictReader(f):
+                pnl = _num(r, "pnl_gbp")
+                if pnl is None: continue
+                out.append({
+                    "date": r.get("date", ""), "time": r.get("time", ""), "direction": r.get("direction", ""),
+                    "entry": _num(r, "entry_price_usd", "entry_price"), "exit": _num(r, "exit_price_usd", "exit_price"),
+                    "points": _num(r, "points_gained"), "pnl": pnl, "reason": r.get("exit_reason", ""),
+                    "stake": _num(r, "stake_per_point", "stake"),
+                    "balance_after": _num(r, "capital_after_gbp", "capital_after"),
+                    "exit_time": r.get("exit_time", "") or (r.get("date", "") + " " + r.get("time", "")),
+                })
+    except Exception:
+        return []
+    return out
+
+def _stats(pnls):
+    w = [p for p in pnls if p > 0]; l = [p for p in pnls if p <= 0]
+    gw, gl = sum(w), abs(sum(l)); dec = len(w) + len(l)
+    return dict(n=len(pnls), w=len(w), l=len(l), wr=100 * len(w) / dec if dec else 0.0,
+                pf=(gw / gl) if gl else (float("inf") if gw else 0.0), net=sum(pnls),
+                avg_w=(gw / len(w)) if w else 0.0, avg_l=(-gl / len(l)) if l else 0.0)
+
+def find_instrument(slug):
+    slug = slug.lower()
+    for inst in ALBIONBASE_INSTRUMENTS:
+        if inst["name"].lower() == slug or inst["name"].lower().startswith(slug) or inst["ticker"].lower() == slug:
+            return inst
+    return None
+
+def render_instrument_page(inst):
+    st, online = fetch_state(inst)
+    trades = read_trades(inst)
+    s = _stats([t["pnl"] for t in trades])
+    pos = (st or {}).get("position") or None
+    bal = ((st or {}).get("portfolio") or {}).get("balance")
+    start = STARTING_CAPITAL_PER_SYSTEM
+    if pos and (st or {}).get("in_trade"):
+        d = pos.get("direction"); posc = {"LONG": "long", "SHORT": "short"}.get(d, "flat")
+        fl = (st or {}).get("floating_gbp"); lk = (st or {}).get("locked_gbp")
+        poscard = ("<div class='kv'><div class='l'>DIRECTION</div><div class='v %s'>%s</div></div>" % (posc, d)
+            + "<div class='kv'><div class='l'>ENTRY</div><div class='v'>%s</div></div>" % pos.get("entry")
+            + "<div class='kv'><div class='l'>PRICE</div><div class='v'>%s</div></div>" % (st or {}).get("price")
+            + "<div class='kv'><div class='l'>STOP</div><div class='v'>%s</div></div>" % pos.get("stop")
+            + "<div class='kv'><div class='l'>TARGET</div><div class='v'>%s</div></div>" % pos.get("target")
+            + "<div class='kv'><div class='l'>STAKE</div><div class='v'>£%s/pt</div></div>" % pos.get("stake")
+            + "<div class='kv'><div class='l'>FLOATING</div><div class='v %s'>%s</div></div>" % (_cls(fl), _money(fl, plus=True))
+            + "<div class='kv'><div class='l'>LOCKED</div><div class='v'>%s</div></div>" % (_money(lk, plus=True) if lk else "--"))
+    else:
+        poscard = "<span class='mut'>No open position (FLAT)</span>" if online else "<span class='off'>OFFLINE</span>"
+    best = max((t["pnl"] for t in trades), default=0.0); worst = min((t["pnl"] for t in trades), default=0.0)
+    perf = ("<div class='kv'><div class='l'>TRADES</div><div class='v'>%d (%dW/%dL)</div></div>" % (s["n"], s["w"], s["l"])
+        + "<div class='kv'><div class='l'>WIN RATE</div><div class='v'>%.1f%%</div></div>" % s["wr"]
+        + "<div class='kv'><div class='l'>PF</div><div class='v'>%s</div></div>" % _pf(s["pf"])
+        + "<div class='kv'><div class='l'>NET</div><div class='v %s'>%s</div></div>" % (_cls(s["net"]), _money(s["net"], plus=True))
+        + "<div class='kv'><div class='l'>AVG W / L</div><div class='v'>%s / %s</div></div>" % (_money(s["avg_w"], plus=True), _money(s["avg_l"]))
+        + "<div class='kv'><div class='l'>BEST / WORST</div><div class='v'>%s / %s</div></div>" % (_money(best, plus=True), _money(worst)))
+    growth = (bal - start) if bal is not None else None
+    gpct = (" (%+.1f%%)" % (100 * growth / start)) if (growth is not None and start) else ""
+    comp = ("<div class='kv'><div class='l'>START</div><div class='v'>%s</div></div>" % _money(start)
+        + "<div class='kv'><div class='l'>CURRENT</div><div class='v big'>%s</div></div>" % _money(bal)
+        + "<div class='kv'><div class='l'>GROWTH</div><div class='v %s'>%s%s</div></div>" % (_cls(growth), _money(growth, plus=True), gpct)
+        + "<div class='kv'><div class='l'>CURRENT STAKE</div><div class='v'>£%s/pt</div></div>" % (pos.get("stake") if pos else "--"))
+    rrows = ""
+    for t in list(reversed(trades))[:10]:
+        dc = {"LONG": "long", "SHORT": "short"}.get(t["direction"], "")
+        dot = "\U0001F7E2" if t["pnl"] > 0 else "\U0001F534"
+        rrows += ("<tr><td>%s</td><td class='%s'>%s</td><td class='num'>%s</td><td class='num'>%s</td><td class='num %s'>%s</td><td>%s %s</td></tr>"
+                  % (t["date"], dc, t["direction"], t["entry"], t["exit"], _cls(t["pnl"]), _money(t["pnl"], plus=True), dot, t["reason"]))
+    recent = "<table><tr><th>Date</th><th>Dir</th><th class='num'>Entry</th><th class='num'>Exit</th><th class='num'>P&amp;L</th><th>Exit</th></tr>" + (rrows or "<tr><td colspan=6 class='mut'>no trades yet</td></tr>") + "</table>"
+    two = ""
+    if inst["name"] == "Gold":
+        lk = (st or {}).get("locked_gbp")
+        stt = ("ACTIVE -- locked " + _money(lk, plus=True)) if lk else "not engaged (below +30pt)"
+        two = "<div class='card'><h2>Two-speed trail (Gold)</h2>Activation +30pt profit &nbsp;|&nbsp; tight trail 10pt &nbsp;|&nbsp; status: <b>%s</b></div>" % stt
+    body = ("<div class='card'><h2>Current position</h2>%s</div>" % poscard
+        + "<div class='card'><h2>Performance (since go-live)</h2>%s</div>" % perf
+        + "<div class='card'><h2>Compounding tracker</h2>%s</div>" % comp
+        + two
+        + "<div class='card'><h2>Recent trades (last 10)</h2>%s</div>" % recent)
+    return _shell("%s %sBASE -- DETAILED REPORT" % (inst["emoji"], inst["name"].upper()), body, _slug(inst))
+
+def render_performance_page():
+    from collections import defaultdict
+    per = {inst["name"]: read_trades(inst) for inst in ALBIONBASE_INSTRUMENTS}
+    all_t = [t for tr in per.values() for t in tr]
+    ov = _stats([t["pnl"] for t in all_t])
+    deployed = STARTING_CAPITAL_PER_SYSTEM * len(ALBIONBASE_INSTRUMENTS)
+    bi = ""
+    for inst in ALBIONBASE_INSTRUMENTS:
+        s = _stats([t["pnl"] for t in per[inst["name"]]])
+        bi += "<tr><td>%s %s</td><td class='num'>%d</td><td class='num'>%.1f%%</td><td class='num'>%s</td><td class='num %s'>%s</td></tr>" % (
+            inst["emoji"], inst["name"], s["n"], s["wr"], _pf(s["pf"]), _cls(s["net"]), _money(s["net"], plus=True))
+    wk = defaultdict(list); mo = defaultdict(list)
+    for t in all_t:
+        d = t["date"]
+        if len(d) >= 10:
+            try:
+                y, w, _ = datetime.strptime(d, "%Y-%m-%d").isocalendar(); wk[(y, w)].append(t["pnl"])
+            except Exception: pass
+            mo[d[:7]].append(t["pnl"])
+    wkrows = "".join("<tr><td>%d-W%02d</td><td class='num'>%d</td><td class='num %s'>%s</td></tr>" % (y, w, len(v), _cls(sum(v)), _money(sum(v), plus=True)) for (y, w), v in sorted(wk.items())) or "<tr><td colspan=3 class='mut'>no data</td></tr>"
+    morows = "".join("<tr><td>%s</td><td class='num'>%d</td><td class='num %s'>%s</td></tr>" % (k, len(v), _cls(sum(v)), _money(sum(v), plus=True)) for k, v in sorted(mo.items())) or "<tr><td colspan=3 class='mut'>no data</td></tr>"
+    merged = sorted(all_t, key=lambda t: t.get("exit_time", "") or t.get("date", ""))
+    eq = peak = maxdd = 0.0
+    for t in merged:
+        eq += t["pnl"]; peak = max(peak, eq); maxdd = max(maxdd, peak - eq)
+    comp = ""
+    for inst in ALBIONBASE_INSTRUMENTS:
+        st, _ = fetch_state(inst); bal = ((st or {}).get("portfolio") or {}).get("balance")
+        g = (" %+.1f%%" % (100 * (bal - STARTING_CAPITAL_PER_SYSTEM) / STARTING_CAPITAL_PER_SYSTEM)) if bal is not None else " --"
+        comp += "<tr><td>%s %s</td><td class='num'>%s</td><td class='num'>%s</td><td class='num'>%s</td></tr>" % (
+            inst["emoji"], inst["name"], _money(STARTING_CAPITAL_PER_SYSTEM), _money(bal), g)
+    body = ("<div class='card'><h2>Overall (since go-live %s)</h2>"
+            "<div class='kv'><div class='l'>TRADES</div><div class='v'>%d</div></div>"
+            "<div class='kv'><div class='l'>WIN RATE</div><div class='v'>%.1f%%</div></div>"
+            "<div class='kv'><div class='l'>PF</div><div class='v'>%s</div></div>"
+            "<div class='kv'><div class='l'>NET</div><div class='v %s'>%s</div></div>"
+            "<div class='kv'><div class='l'>ON DEPLOYED</div><div class='v'>%s</div></div>"
+            "<div class='kv'><div class='l'>MAX DRAWDOWN</div><div class='v neg'>-%s</div></div>"
+            "<div class='kv'><div class='l'>RUNNING COST</div><div class='v costs'>£0.00 ✅</div></div></div>"
+            % (GO_LIVE_DATE, ov["n"], ov["wr"], _pf(ov["pf"]), _cls(ov["net"]), _money(ov["net"], plus=True), _money(deployed), _money(maxdd)))
+    body += "<div class='card'><h2>By instrument</h2><table><tr><th>System</th><th class='num'>Trades</th><th class='num'>WR</th><th class='num'>PF</th><th class='num'>Net</th></tr>%s</table></div>" % bi
+    body += "<div class='card'><h2>By week (ISO)</h2><table><tr><th>Week</th><th class='num'>Trades</th><th class='num'>Net</th></tr>%s</table></div>" % wkrows
+    body += "<div class='card'><h2>By month</h2><table><tr><th>Month</th><th class='num'>Trades</th><th class='num'>Net</th></tr>%s</table></div>" % morows
+    body += "<div class='card'><h2>Compounding tracker</h2><table><tr><th>System</th><th class='num'>Start</th><th class='num'>Current</th><th class='num'>Growth</th></tr>%s</table></div>" % comp
+    return _shell("ALBIONBASE PERFORMANCE TRACKER", body, "perf")
+
+def render_archie_brief():
+    rows, portfolio, _ = build_report()
+    L = ["ALBIONBASE ARCHIE BRIEF", "Generated: " + datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "",
+         "PORTFOLIO",
+         "  Balance: %s | Today: %s | Systems: %d/%d live" % (
+             _money(portfolio["total_balance"]), _money(portfolio["today"], plus=True),
+             portfolio["systems_online"], portfolio["systems_total"]),
+         "", "OPEN POSITIONS"]
+    op = [r for r in rows if r["in_trade"]]
+    if op:
+        for r in op:
+            L.append("  %s %s %s | floating %s | locked %s" % (
+                r["emoji"], r["name"], r["direction"], _money(r["floating"], plus=True),
+                _money(r["locked"], plus=True) if r["locked"] else "--"))
+    else:
+        L.append("  (all flat)")
+    L += ["", "PERFORMANCE (since go-live)"]
+    for r in rows:
+        p = r["perf"]
+        if p.get("available"):
+            L.append("  %s %-6s %d trades | WR %.0f%% | PF %s | net %s" % (
+                r["emoji"], r["name"], p["trades"], p["wr"], _pf(p["pf"]), _money(p["net"], plus=True)))
+    L += ["", "ALERTS"]
+    alerts = []
+    for r in rows:
+        if not r["online"] and not r["cached"]: alerts.append("  %s OFFLINE" % r["name"])
+        p = r["perf"]
+        if p.get("available") and p["trades"] >= 5 and p["pf"] < 1.0:
+            alerts.append("  %s PF below 1 (%s)" % (r["name"], _pf(p["pf"])))
+    L += alerts or ["  none"]
+    text = "\n".join(L)
+    body = ("<div class='card'><pre id='brief'>" + text + "</pre>"
+            "<button class='copy' onclick=\"navigator.clipboard.writeText(document.getElementById('brief').innerText)\">Copy to clipboard</button></div>")
+    return _shell("ALBIONBASE ARCHIE BRIEF", body, "brief")
+
+def gaius_data():
+    out = {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "instruments": {}, "portfolio": {}}
+    all_pnls = []
+    for inst in ALBIONBASE_INSTRUMENTS:
+        tr = read_trades(inst); s = _stats([t["pnl"] for t in tr]); all_pnls += [t["pnl"] for t in tr]
+        out["instruments"][inst["name"]] = {
+            "trades": [{"date": t["date"], "direction": t["direction"], "entry": t["entry"], "exit": t["exit"],
+                        "points": t["points"], "pnl_gbp": t["pnl"], "exit_reason": t["reason"],
+                        "stake": t["stake"], "balance_after": t["balance_after"]} for t in tr],
+            "summary": {"trades": s["n"], "wins": s["w"], "losses": s["l"], "win_rate": round(s["wr"] / 100, 3),
+                        "profit_factor": (None if s["pf"] == float("inf") else round(s["pf"], 3)),
+                        "net_pnl": round(s["net"], 2)}}
+    ps = _stats(all_pnls); deployed = STARTING_CAPITAL_PER_SYSTEM * len(ALBIONBASE_INSTRUMENTS)
+    out["portfolio"] = {"total_trades": ps["n"], "win_rate": round(ps["wr"] / 100, 3),
+                        "profit_factor": (None if ps["pf"] == float("inf") else round(ps["pf"], 3)),
+                        "net_pnl": round(ps["net"], 2), "starting_capital": deployed,
+                        "current_balance": round(deployed + ps["net"], 2)}
+    return out
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
@@ -235,6 +469,34 @@ def api_systems():
 def api_health():
     return Response(json.dumps({"status": "ok", "system": "AlbionBaseReporter",
                                 "version": VERSION, "port": PORT}), mimetype="application/json")
+
+@app.route("/performance")
+def performance():
+    return Response(render_performance_page(), mimetype="text/html")
+
+@app.route("/archie-brief")
+def archie_brief():
+    return Response(render_archie_brief(), mimetype="text/html")
+
+@app.route("/monitor")
+def monitor():
+    body = ("<div class='card'><h2>System Monitor</h2>"
+            "Hardware/process monitor runs on <b>port 5015</b> (AlbionMonitorAI). "
+            "<a href='http://localhost:5015' style='color:#58a6ff'>Open System Monitor &rarr;</a>"
+            "<div class='mut' style='margin-top:8px;'>K1 hardware metrics + per-system heartbeats activate "
+            "once Tailscale Phase 2 is configured. Dell metrics available now via :5015.</div></div>")
+    return Response(_shell("SYSTEM MONITOR", body, "mon"), mimetype="text/html")
+
+@app.route("/api/gaius-data")
+def api_gaius():
+    return Response(json.dumps(gaius_data(), default=str, indent=2), mimetype="application/json")
+
+@app.route("/<slug>")
+def instrument_page(slug):
+    inst = find_instrument(slug)
+    if not inst:
+        return Response("Unknown instrument: " + slug, status=404, mimetype="text/plain")
+    return Response(render_instrument_page(inst), mimetype="text/html")
 
 
 if __name__ == "__main__":
