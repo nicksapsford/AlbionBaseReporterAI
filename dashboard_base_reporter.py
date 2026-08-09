@@ -104,6 +104,8 @@ def build_report():
             "online": online, "cached": (st is not None and not online),
             "version": (st or {}).get("version"),
             "balance": portfolio.get("balance"),
+            "acct_bal": (st or {}).get("account_balance"),     # Part 3: real Capital.com pot (shared account)
+            "acct_type": (st or {}).get("account_type"),
             "today": portfolio.get("today_pnl"),
             "in_trade": bool((st or {}).get("in_trade")),
             "direction": (pos or {}).get("direction", "FLAT") if pos else "FLAT",
@@ -117,9 +119,19 @@ def build_report():
     deployed = STARTING_CAPITAL_PER_SYSTEM * len(ALBIONBASE_INSTRUMENTS)
     total_bal = sum(bals) if bals else None
     net_perf = sum(r["perf"]["net"] for r in rows if r["perf"].get("available"))
+    # Part 3: TOTAL POT = the real Capital.com balance. It is ONE shared account, so every system reports
+    # the same figure -- take the first non-null. Risk per trade = 2% of it.
+    pots = [r["acct_bal"] for r in rows if r.get("acct_bal") is not None]
+    total_pot = pots[0] if pots else None
+    atypes = [r["acct_type"] for r in rows if r.get("acct_type")]
+    account_type = (atypes[0] if atypes else "DEMO")
+    risk_pt = round(total_pot * 0.02, 2) if total_pot else None
     portfolio = {
         "deployed": deployed,
         "total_balance": total_bal,
+        "total_pot": total_pot,
+        "account_type": account_type,
+        "risk_per_trade": risk_pt,
         "today": sum(todays) if todays else 0.0,
         "net_since_golive": net_perf,
         "systems_online": sum(1 for r in rows if r["online"]),
@@ -137,6 +149,15 @@ def _pf(v):
     if v is None: return "--"
     return "inf" if v == float("inf") else "%.2f" % v
 
+def _acct_tag(t):
+    """Part 3: DEMO (grey) vs LIVE (green) account badge. LIVE is deliberately eye-catching."""
+    t = (t or "DEMO").upper()
+    if t == "LIVE":
+        return ('<span style="background:#12331b;color:#3fb950;border:1px solid #2ea043;'
+                'border-radius:4px;padding:2px 9px;font-weight:700;letter-spacing:1px;">LIVE</span>')
+    return ('<span style="background:#26262b;color:#8b949e;border:1px solid #444c56;'
+            'border-radius:4px;padding:2px 9px;font-weight:700;letter-spacing:1px;">DEMO</span>')
+
 def _sys_row_html(r):
     if not r["online"] and not r["cached"]:
         status = '<span class="off">OFFLINE</span>'
@@ -150,9 +171,9 @@ def _sys_row_html(r):
     tcls = "pos" if (r["today"] or 0) >= 0 else "neg"
     return (
         '<tr><td>%s %s <span class="mut">%s</span></td><td>%s</td>'
-        '<td class="num">%s</td><td class="num %s">%s</td><td class="%s">%s</td><td class="num">%s</td></tr>'
+        '<td class="num %s">%s</td><td class="%s">%s</td><td class="num">%s</td></tr>'
     ) % (r["emoji"], r["name"], (r["version"] or "--"), status,
-         _money(r["balance"]), tcls, _money(r["today"], plus=True), posc, pos, locked)
+         tcls, _money(r["today"], plus=True), posc, pos, locked)
 
 def _perf_row_html(r):
     p = r["perf"]
@@ -172,8 +193,9 @@ def render_page(rows, portfolio, any_online):
                 "net": portfolio["net_since_golive"]}
     sys_rows = "".join(_sys_row_html(r) for r in rows)
     perf_rows = "".join(_perf_row_html(r) for r in rows)
-    bal_line = _money(portfolio["total_balance"])
-    change = (portfolio["total_balance"] - portfolio["deployed"]) if portfolio["total_balance"] is not None else None
+    change = portfolio["net_since_golive"]                    # Part 3: net from trade logs since go-live
+    pot_line = _money(portfolio["total_pot"])
+    risk_line = _money(portfolio["risk_per_trade"])
     controls = "".join('<button class="ctl" disabled>%s %s off</button>' % (r["emoji"], r["name"]) for r in rows)
     return """<!doctype html><html><head><meta charset="utf-8"><title>AlbionBase Command Centre</title>
 <meta http-equiv="refresh" content="30">
@@ -197,15 +219,18 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
 
 <div class="card"><h2>Portfolio</h2>
   <div class="grid">
-    <div class="kv"><div class="l">DEPLOYED</div><div class="v">{deployed}</div></div>
-    <div class="kv"><div class="l">CURRENT BALANCE</div><div class="v big">{bal}</div></div>
-    <div class="kv"><div class="l">SINCE GO-LIVE</div><div class="v {chcls}">{change}</div></div>
+    <div class="kv"><div class="l">TOTAL POT</div><div class="v big">{pot}</div></div>
+    <div class="kv"><div class="l">ACCOUNT</div><div class="v">{accttag}</div></div>
+    <div class="kv"><div class="l">RISK / TRADE (2%)</div><div class="v">{risk}</div></div>
     <div class="kv"><div class="l">TODAY</div><div class="v {tcls}">{today}</div></div>
+    <div class="kv"><div class="l">NET SINCE GO-LIVE</div><div class="v {chcls}">{change}</div></div>
     <div class="kv"><div class="l">SYSTEMS ONLINE</div><div class="v">{online}/{total}</div></div>
-  </div></div>
+  </div>
+  <div class="mut" style="margin-top:8px;">TOTAL POT is read live from the Capital.com account (read-only); risk/trade = 2% of it. Per-system paper balances retired — see per-system P&amp;L below.</div>
+</div>
 
 <div class="card"><h2>Systems (live)</h2>
-  <table><tr><th>System</th><th>Status</th><th class="num">Balance</th><th class="num">Today</th><th>Position</th><th class="num">Locked</th></tr>
+  <table><tr><th>System</th><th>Status</th><th class="num">Today</th><th>Position</th><th class="num">Locked</th></tr>
   {sys_rows}</table></div>
 
 <div class="card"><h2>Performance (from trade logs)</h2>
@@ -221,7 +246,7 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
   <div class="mut" style="margin-top:8px;">Controls wire to K1 /api/shutdown via Tailscale -- staged follow-up (disabled until K1 live).</div></div>
 </body></html>""".format(
         now=now, k1=k1, ver=VERSION, golive=GO_LIVE_DATE,
-        deployed=_money(portfolio["deployed"]), bal=bal_line,
+        pot=pot_line, accttag=_acct_tag(portfolio["account_type"]), risk=risk_line,
         change=_money(change, plus=True), chcls=("pos" if (change or 0) >= 0 else "neg"),
         today=_money(portfolio["today"], plus=True), tcls=("pos" if portfolio["today"] >= 0 else "neg"),
         online=portfolio["systems_online"], total=portfolio["systems_total"],
@@ -480,8 +505,8 @@ def _pushover_send(title, message):
 def build_daily_summary():
     rows, portfolio, _ = build_report()
     lines = ["%s %-5s %s" % (r["emoji"], r["name"], _money(r["today"], plus=True)) for r in rows]
-    lines.append("TODAY:   " + _money(portfolio["today"], plus=True))
-    lines.append("BALANCE: " + _money(portfolio["total_balance"]))
+    lines.append("TODAY:    " + _money(portfolio["today"], plus=True))
+    lines.append("TOTAL POT: %s (%s)" % (_money(portfolio["total_pot"]), portfolio["account_type"]))
     return "AlbionBase Daily -- " + _money(portfolio["today"], plus=True), "\n".join(lines)
 
 def _daily_summary_scheduler():
