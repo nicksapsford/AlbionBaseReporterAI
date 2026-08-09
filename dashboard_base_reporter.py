@@ -21,7 +21,17 @@ from config_base_reporter import (
     ALBIONBASE_INSTRUMENTS, PORT, GO_LIVE_DATE, STARTING_CAPITAL_PER_SYSTEM,
     FETCH_TIMEOUT_SEC, state_url, log_path,
     LIVE_NOTIFICATIONS, PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN, DAILY_SUMMARY_HOUR_UTC,
+    ENV_LABEL,
 )
+
+
+def _env_badge():
+    """Part 2a: unmissable environment banner -- amber TEST-Dell vs green LIVE-K1."""
+    if ENV_LABEL == "LIVE":
+        return ('<span style="background:#12331b;color:#3fb950;border:1px solid #2ea043;border-radius:5px;'
+                'padding:2px 10px;font-weight:700;letter-spacing:1px;">LIVE — K1</span>')
+    return ('<span style="background:#3a2f00;color:#e0b020;border:1px solid #6b5600;border-radius:5px;'
+            'padding:2px 10px;font-weight:700;letter-spacing:1px;">TEST — Dell</span>')
 
 _VER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
 VERSION = open(_VER).read().strip() if os.path.exists(_VER) else "1.0.0"
@@ -181,7 +191,7 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
 .grid{{display:flex;gap:24px;flex-wrap:wrap;}} .kv{{margin-right:24px;}} .kv .l{{color:#8b949e;font-size:11px;}} .kv .v{{font-size:16px;}}
 .costs{{color:#3fb950;font-weight:700;}}
 </style></head><body>
-<h1>\U0001F3DB️ ALBIONBASE COMMAND CENTRE</h1>
+<h1>\U0001F3DB️ ALBIONBASE COMMAND CENTRE &nbsp; {env}</h1>
 <div class="sub">Generated {now} UTC &nbsp;|&nbsp; Live system: ACEMAGIC K1 {k1} &nbsp;|&nbsp; Reporter v{ver} (:{port}) &nbsp;|&nbsp; go-live {golive}</div>
 {nav}
 
@@ -218,7 +228,7 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
         sys_rows=sys_rows, perf_rows=perf_rows,
         tot_trades=tot_perf["trades"], tot_net=_money(tot_perf["net"], plus=True),
         ncls=("pos" if tot_perf["net"] >= 0 else "neg"), controls=controls, port=PORT,
-        nav=_nav("home"),
+        nav=_nav("home"), env=_env_badge(),
     )
 
 
@@ -256,7 +266,7 @@ def _shell(title, body, active=""):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     return ("<!doctype html><html><head><meta charset='utf-8'><title>" + title + "</title>"
             "<meta http-equiv='refresh' content='60'><style>" + _CSS + "</style></head><body>"
-            "<h1>" + title + "</h1><div class='sub'>Generated " + now + " UTC | AlbionBase Reporter v" + VERSION + "</div>"
+            "<h1>" + title + " &nbsp; " + _env_badge() + "</h1><div class='sub'>Generated " + now + " UTC | AlbionBase Reporter v" + VERSION + "</div>"
             + _nav(active) + body + "</body></html>")
 
 def _num(row, *keys):

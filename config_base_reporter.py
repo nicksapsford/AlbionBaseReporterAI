@@ -35,9 +35,12 @@ PUSHOVER_USER_KEY      = os.getenv("PUSHOVER_USER_KEY", "")
 PUSHOVER_API_TOKEN     = os.getenv("PUSHOVER_API_TOKEN", "")
 DAILY_SUMMARY_HOUR_UTC = 21
 
-# Poll host. Set ALBIONBASE_K1_HOST to the K1 Tailscale IP (100.x.x.x) in production. Until K1/Tailscale
-# is up it defaults to localhost, so the reporter reads the DELL paper systems as a live stand-in.
-_HOST = os.getenv("ALBIONBASE_K1_HOST", "127.0.0.1")
+# Environment label (Part 2a): TEST on the Dell (amber), LIVE on the K1 (green). Set ENV_LABEL in .env.
+ENV_LABEL = os.getenv("ENV_LABEL", "TEST").strip().upper()
+
+# Poll host (Part 2b): each PC's reporter polls ONLY that PC's own systems -- ALBIONBASE_HOST=localhost
+# on both Dell and K1. (Legacy ALBIONBASE_K1_HOST still honoured for back-compat.) Never a hardcoded IP.
+_HOST = os.getenv("ALBIONBASE_HOST", os.getenv("ALBIONBASE_K1_HOST", "127.0.0.1"))
 
 # Base folder holding the live systems' logs. Dell (now) = the local repos; K1 = a Tailscale file share.
 _LOGS_BASE = os.getenv("ALBIONBASE_LOGS_BASE", r"C:\Users\abc\Desktop\AlbionBase")
