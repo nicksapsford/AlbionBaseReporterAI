@@ -12,6 +12,15 @@ reads each system's live state over HTTP (/api/state) and its trade CSV for perf
 """
 import os
 
+# Load this repo's .env so the per-machine settings below actually apply (ALBIONBASE_K1_HOST /
+# ALBIONBASE_LOGS_BASE / LIVE_NOTIFICATIONS / Pushover). Without this the reporter ignored .env and
+# ALBIONBASE_LOGS_BASE stayed the Dell default -- on the K1 that path is wrong and the CSVs go unread.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except Exception:
+    pass
+
 PORT = 5041                 # 5040 is held by a Windows svchost (WSAEACCES on bind) -- confirmed 7 Aug.
 GO_LIVE_DATE = "2026-08-17"
 STARTING_CAPITAL_PER_SYSTEM = 3000.0     # GBP deployed per system at K1 go-live
