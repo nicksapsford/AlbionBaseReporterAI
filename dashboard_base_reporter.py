@@ -24,6 +24,13 @@ from config_base_reporter import (
     ENV_LABEL,
 )
 
+# Part 4c -- P&L epoch (Stage-B cutover). CSV rows dated before this are the retired Stanley paper-trading
+# era and are excluded from every P&L figure below. Shared source of truth in trading_mode (vendored).
+try:
+    from trading_mode import PNL_START_DATE
+except Exception:
+    PNL_START_DATE = "2026-08-10"
+
 
 def _env_badge():
     """Part 2a: unmissable environment banner -- amber TEST-Dell vs green LIVE-K1."""
@@ -32,6 +39,20 @@ def _env_badge():
                 'padding:2px 10px;font-weight:700;letter-spacing:1px;">LIVE — K1</span>')
     return ('<span style="background:#3a2f00;color:#e0b020;border:1px solid #6b5600;border-radius:5px;'
             'padding:2px 10px;font-weight:700;letter-spacing:1px;">TEST — Dell</span>')
+
+
+def _mode_badge():
+    """Part 2: PAPER/LIVE trading-mode badge -- amber PAPER-DEMO vs green LIVE-REAL MONEY."""
+    try:
+        import trading_mode
+        live = (trading_mode.read_mode() == "LIVE")
+    except Exception:
+        live = False
+    if live:
+        return ('<span style="background:#12331b;color:#3fb950;border:1px solid #2ea043;border-radius:5px;'
+                'padding:2px 10px;font-weight:700;letter-spacing:1px;">LIVE — REAL MONEY</span>')
+    return ('<span style="background:#3a2f00;color:#e0b020;border:1px solid #6b5600;border-radius:5px;'
+            'padding:2px 10px;font-weight:700;letter-spacing:1px;">PAPER — DEMO</span>')
 
 _VER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
 VERSION = open(_VER).read().strip() if os.path.exists(_VER) else "1.0.0"
@@ -61,6 +82,9 @@ def perf_stats(inst):
     try:
         with open(path, newline="", encoding="utf-8", errors="replace") as f:
             for row in csv.DictReader(f):
+                _d = (row.get("date") or "").strip()
+                if _d and PNL_START_DATE and _d < PNL_START_DATE:
+                    continue   # Part 4c: skip pre-Stage-B Stanley paper rows
                 try:
                     p = float(row.get("pnl_gbp"))
                 except (TypeError, ValueError):
@@ -213,7 +237,7 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
 .grid{{display:flex;gap:24px;flex-wrap:wrap;}} .kv{{margin-right:24px;}} .kv .l{{color:#8b949e;font-size:11px;}} .kv .v{{font-size:16px;}}
 .costs{{color:#3fb950;font-weight:700;}}
 </style></head><body>
-<h1>\U0001F3DB️ ALBIONBASE COMMAND CENTRE &nbsp; {env}</h1>
+<h1>\U0001F3DB️ ALBIONBASE COMMAND CENTRE &nbsp; {env} &nbsp; {mode}</h1>
 <div class="sub">Generated {now} UTC &nbsp;|&nbsp; Live system: ACEMAGIC K1 {k1} &nbsp;|&nbsp; Reporter v{ver} (:{port}) &nbsp;|&nbsp; go-live {golive}</div>
 {nav}
 
@@ -223,10 +247,10 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
     <div class="kv"><div class="l">ACCOUNT</div><div class="v">{accttag}</div></div>
     <div class="kv"><div class="l">RISK / TRADE (2%)</div><div class="v">{risk}</div></div>
     <div class="kv"><div class="l">TODAY</div><div class="v {tcls}">{today}</div></div>
-    <div class="kv"><div class="l">NET SINCE GO-LIVE</div><div class="v {chcls}">{change}</div></div>
+    <div class="kv"><div class="l">NET (REAL ORDERS)</div><div class="v {chcls}">{change}</div></div>
     <div class="kv"><div class="l">SYSTEMS ONLINE</div><div class="v">{online}/{total}</div></div>
   </div>
-  <div class="mut" style="margin-top:8px;">TOTAL POT is read live from the Capital.com account (read-only); risk/trade = 2% of it. Per-system paper balances retired — see per-system P&amp;L below.</div>
+  <div class="mut" style="margin-top:8px;">TOTAL POT is read live from the Capital.com account (read-only); risk/trade = 2% of it. NET counts real Capital.com orders only, from the Stage-B cutover {pnlstart} onwards — the retired Stanley paper-trading era is excluded. Per-system paper balances retired — see per-system P&amp;L below.</div>
 </div>
 
 <div class="card"><h2>Systems (live)</h2>
@@ -253,7 +277,7 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
         sys_rows=sys_rows, perf_rows=perf_rows,
         tot_trades=tot_perf["trades"], tot_net=_money(tot_perf["net"], plus=True),
         ncls=("pos" if tot_perf["net"] >= 0 else "neg"), controls=controls, port=PORT,
-        nav=_nav("home"), env=_env_badge(),
+        nav=_nav("home"), env=_env_badge(), mode=_mode_badge(), pnlstart=PNL_START_DATE,
     )
 
 
@@ -308,6 +332,9 @@ def read_trades(inst):
     try:
         with open(log_path(inst), newline="", encoding="utf-8", errors="replace") as f:
             for r in csv.DictReader(f):
+                _d = (r.get("date") or "").strip()
+                if _d and PNL_START_DATE and _d < PNL_START_DATE:
+                    continue   # Part 4c: skip pre-Stage-B Stanley paper rows
                 pnl = _num(r, "pnl_gbp")
                 if pnl is None: continue
                 out.append({
