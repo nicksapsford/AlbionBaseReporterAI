@@ -49,10 +49,10 @@ def _mode_badge():
     except Exception:
         live = False
     if live:
-        return ('<span style="background:#12331b;color:#3fb950;border:1px solid #2ea043;border-radius:5px;'
+        return ('<span style="background:#3d0f0f;color:#ff5555;border:1px solid #b02020;border-radius:5px;'
                 'padding:2px 10px;font-weight:700;letter-spacing:1px;">LIVE — REAL MONEY</span>')
     return ('<span style="background:#3a2f00;color:#e0b020;border:1px solid #6b5600;border-radius:5px;'
-            'padding:2px 10px;font-weight:700;letter-spacing:1px;">PAPER — DEMO</span>')
+            'padding:2px 10px;font-weight:700;letter-spacing:1px;">DEMO</span>')
 
 _VER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
 VERSION = open(_VER).read().strip() if os.path.exists(_VER) else "1.0.0"
