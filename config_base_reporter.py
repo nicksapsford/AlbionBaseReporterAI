@@ -50,8 +50,8 @@ ALBIONBASE_INSTRUMENTS = [
      "live_ip": _HOST, "repo": "GoldBaseAI", "log_csv": "gold_trades.csv"},
     {"name": "Oil",   "ticker": "BRENT", "port": 5035, "currency": "USD", "emoji": "\U0001F6E2️",
      "live_ip": _HOST, "repo": "OilBaseAI",  "log_csv": "oil_trades.csv"},
-    {"name": "FTSE",  "ticker": "FTSE",  "port": 5032, "currency": "GBP", "emoji": "\U0001F1EC\U0001F1E7",
-     "live_ip": _HOST, "repo": "FTSEBaseAI", "log_csv": "ftse_trades.csv"},
+    # FTSE REMOVED 11 Aug 2026 -- £2/pt on UK100 margin exceeds the £3,000 pot at 2% risk (see changelog).
+    # AlbionBase runs 3 instruments: Gold, Oil, US500. FTSEBaseAI repo archived.
     {"name": "US500", "ticker": "US500", "port": 5034, "currency": "USD", "emoji": "\U0001F1FA\U0001F1F8",
      "live_ip": _HOST, "repo": "USBaseAI",   "log_csv": "us_trades.csv"},
     # ---- Future instruments: add here ONLY (one dict) ----
