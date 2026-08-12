@@ -31,6 +31,12 @@ try:
 except Exception:
     PNL_START_DATE = "2026-08-10"
 
+# Investment ledger (Part 3f): the TRUE Trading P&L = Capital.com balance - net invested.
+try:
+    import ledger
+except Exception:
+    ledger = None
+
 
 def _env_badge():
     """Part 2a: unmissable environment banner -- amber TEST-Dell vs green LIVE-K1."""
@@ -150,6 +156,7 @@ def build_report():
     atypes = [r["acct_type"] for r in rows if r.get("acct_type")]
     account_type = (atypes[0] if atypes else "DEMO")
     risk_pt = round(total_pot * 0.02, 2) if total_pot else None
+    led = ledger.summary(total_pot) if ledger else {"deposited": None, "withdrawn": None, "net_invested": None, "trading_pnl": None}
     portfolio = {
         "deployed": deployed,
         "total_balance": total_bal,
@@ -158,6 +165,10 @@ def build_report():
         "risk_per_trade": risk_pt,
         "today": sum(todays) if todays else 0.0,
         "net_since_golive": net_perf,
+        "deposited": led.get("deposited"),
+        "withdrawn": led.get("withdrawn"),
+        "net_invested": led.get("net_invested"),
+        "trading_pnl": led.get("trading_pnl"),   # TRUE P&L = Capital.com balance - net invested
         "systems_online": sum(1 for r in rows if r["online"]),
         "systems_total": len(rows),
     }
@@ -245,20 +256,28 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
   <div class="grid">
     <div class="kv"><div class="l">TOTAL POT</div><div class="v big">{pot}</div></div>
     <div class="kv"><div class="l">ACCOUNT</div><div class="v">{accttag}</div></div>
-    <div class="kv"><div class="l">RISK / TRADE (2%)</div><div class="v">{risk}</div></div>
-    <div class="kv"><div class="l">TODAY</div><div class="v {tcls}">{today}</div></div>
-    <div class="kv"><div class="l">NET (REAL ORDERS)</div><div class="v {chcls}">{change}</div></div>
+    <div class="kv"><div class="l">RISK / TRADE (2% of £3k notional)</div><div class="v">{risk}</div></div>
     <div class="kv"><div class="l">SYSTEMS ONLINE</div><div class="v">{online}/{total}</div></div>
   </div>
-  <div class="mut" style="margin-top:8px;">TOTAL POT is read live from the Capital.com account (read-only); risk/trade = 2% of it. NET counts real Capital.com orders only, from the Stage-B cutover {pnlstart} onwards — the retired Stanley paper-trading era is excluded. Per-system paper balances retired — see per-system P&amp;L below.</div>
+</div>
+
+<div class="card"><h2>Investment Ledger &mdash; true Trading P&amp;L</h2>
+  <div class="grid">
+    <div class="kv"><div class="l">TOTAL DEPOSITED</div><div class="v">{deposited}</div></div>
+    <div class="kv"><div class="l">TOTAL WITHDRAWN</div><div class="v">{withdrawn}</div></div>
+    <div class="kv"><div class="l">NET INVESTED</div><div class="v">{netinv}</div></div>
+    <div class="kv"><div class="l">CAPITAL.COM BALANCE</div><div class="v">{pot}</div></div>
+    <div class="kv"><div class="l">TRADING P&amp;L</div><div class="v big {tpcls}">{tradingpnl}</div></div>
+  </div>
+  <div class="mut" style="margin-top:8px;">TRADING P&amp;L = Capital.com balance &minus; net invested &mdash; the true figure, matching the broker exactly and immune to deposits/withdrawals. Add deposits/withdrawals on the RoundTableBase switch. SYSTEMS CONTRIBUTION below is a price-based estimate (real orders since {pnlstart}) kept for Gaius, not the account truth.</div>
 </div>
 
 <div class="card"><h2>Systems (live)</h2>
   <table><tr><th>System</th><th>Status</th><th class="num">Today</th><th>Position</th><th class="num">Locked</th></tr>
   {sys_rows}</table></div>
 
-<div class="card"><h2>Performance (from trade logs)</h2>
-  <table><tr><th>System</th><th class="num">Trades</th><th class="num">WR</th><th class="num">PF</th><th class="num">Avg W</th><th class="num">Net</th></tr>
+<div class="card"><h2>Systems Contribution (price estimate from trade logs &mdash; for Gaius, not account truth)</h2>
+  <table><tr><th>System</th><th class="num">Trades</th><th class="num">WR</th><th class="num">PF</th><th class="num">Avg W</th><th class="num">Contribution</th></tr>
   {perf_rows}
   <tr style="border-top:2px solid #30363d;"><td><b>TOTAL</b></td><td class="num"><b>{tot_trades}</b></td><td class="num">--</td><td class="num">--</td><td class="num">--</td><td class="num {ncls}"><b>{tot_net}</b></td></tr>
   </table></div>
@@ -271,8 +290,10 @@ th{{color:#8b949e;font-weight:600;font-size:11px;text-transform:uppercase;}} .nu
 </body></html>""".format(
         now=now, k1=k1, ver=VERSION, golive=GO_LIVE_DATE,
         pot=pot_line, accttag=_acct_tag(portfolio["account_type"]), risk=risk_line,
-        change=_money(change, plus=True), chcls=("pos" if (change or 0) >= 0 else "neg"),
-        today=_money(portfolio["today"], plus=True), tcls=("pos" if portfolio["today"] >= 0 else "neg"),
+        deposited=_money(portfolio["deposited"]), withdrawn=_money(portfolio["withdrawn"]),
+        netinv=_money(portfolio["net_invested"]),
+        tradingpnl=_money(portfolio["trading_pnl"], plus=True),
+        tpcls=("pos" if (portfolio["trading_pnl"] or 0) >= 0 else "neg"),
         online=portfolio["systems_online"], total=portfolio["systems_total"],
         sys_rows=sys_rows, perf_rows=perf_rows,
         tot_trades=tot_perf["trades"], tot_net=_money(tot_perf["net"], plus=True),
@@ -387,7 +408,7 @@ def render_instrument_page(inst):
     perf = ("<div class='kv'><div class='l'>TRADES</div><div class='v'>%d (%dW/%dL)</div></div>" % (s["n"], s["w"], s["l"])
         + "<div class='kv'><div class='l'>WIN RATE</div><div class='v'>%.1f%%</div></div>" % s["wr"]
         + "<div class='kv'><div class='l'>PF</div><div class='v'>%s</div></div>" % _pf(s["pf"])
-        + "<div class='kv'><div class='l'>NET</div><div class='v %s'>%s</div></div>" % (_cls(s["net"]), _money(s["net"], plus=True))
+        + "<div class='kv'><div class='l'>Contribution</div><div class='v %s'>%s</div></div>" % (_cls(s["net"]), _money(s["net"], plus=True))
         + "<div class='kv'><div class='l'>AVG W / L</div><div class='v'>%s / %s</div></div>" % (_money(s["avg_w"], plus=True), _money(s["avg_l"]))
         + "<div class='kv'><div class='l'>BEST / WORST</div><div class='v'>%s / %s</div></div>" % (_money(best, plus=True), _money(worst)))
     growth = (bal - start) if bal is not None else None
@@ -450,7 +471,7 @@ def render_performance_page():
             "<div class='kv'><div class='l'>TRADES</div><div class='v'>%d</div></div>"
             "<div class='kv'><div class='l'>WIN RATE</div><div class='v'>%.1f%%</div></div>"
             "<div class='kv'><div class='l'>PF</div><div class='v'>%s</div></div>"
-            "<div class='kv'><div class='l'>NET</div><div class='v %s'>%s</div></div>"
+            "<div class='kv'><div class='l'>Contribution</div><div class='v %s'>%s</div></div>"
             "<div class='kv'><div class='l'>ON DEPLOYED</div><div class='v'>%s</div></div>"
             "<div class='kv'><div class='l'>MAX DRAWDOWN</div><div class='v neg'>-%s</div></div>"
             "<div class='kv'><div class='l'>RUNNING COST</div><div class='v costs'>£0.00 ✅</div></div></div>"
@@ -531,10 +552,12 @@ def _pushover_send(title, message):
 
 def build_daily_summary():
     rows, portfolio, _ = build_report()
-    lines = ["%s %-5s %s" % (r["emoji"], r["name"], _money(r["today"], plus=True)) for r in rows]
-    lines.append("TODAY:    " + _money(portfolio["today"], plus=True))
+    lines = ["%s %-5s %s (contrib.)" % (r["emoji"], r["name"], _money(r["today"], plus=True)) for r in rows]
     lines.append("TOTAL POT: %s (%s)" % (_money(portfolio["total_pot"]), portfolio["account_type"]))
-    return "AlbionBase Daily -- " + _money(portfolio["today"], plus=True), "\n".join(lines)
+    lines.append("NET INVESTED: " + _money(portfolio["net_invested"]))
+    lines.append("TRADING P&L: " + _money(portfolio["trading_pnl"], plus=True) + "  (balance - net invested)")
+    # Part 3f: the TRUE Trading P&L (ledger) headlines the daily summary, not the price estimate.
+    return "AlbionBase Daily -- Trading P&L " + _money(portfolio["trading_pnl"], plus=True), "\n".join(lines)
 
 def _daily_summary_scheduler():
     import time
