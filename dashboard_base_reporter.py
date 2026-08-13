@@ -538,13 +538,14 @@ def gaius_data():
 
 
 # ── daily summary Pushover (brief Part 5: ONE 21:00 UTC message across all instruments) ────────
-def _pushover_send(title, message):
+def _pushover_send(title, message, priority=-1):
+    """Daily summary is Low priority (Part 4d). Gated by LIVE_NOTIFICATIONS + creds."""
     if not LIVE_NOTIFICATIONS or not PUSHOVER_USER_KEY or not PUSHOVER_API_TOKEN:
         return False
     try:
         import urllib.parse
         data = urllib.parse.urlencode({"token": PUSHOVER_API_TOKEN, "user": PUSHOVER_USER_KEY,
-                                       "title": title, "message": message}).encode()
+                                       "title": title, "message": message, "priority": priority}).encode()
         urllib.request.urlopen("https://api.pushover.net/1/messages.json", data=data, timeout=6)
         return True
     except Exception:
@@ -552,12 +553,18 @@ def _pushover_send(title, message):
 
 def build_daily_summary():
     rows, portfolio, _ = build_report()
-    lines = ["%s %-5s %s (contrib.)" % (r["emoji"], r["name"], _money(r["today"], plus=True)) for r in rows]
-    lines.append("TOTAL POT: %s (%s)" % (_money(portfolio["total_pot"]), portfolio["account_type"]))
-    lines.append("NET INVESTED: " + _money(portfolio["net_invested"]))
-    lines.append("TRADING P&L: " + _money(portfolio["trading_pnl"], plus=True) + "  (balance - net invested)")
-    # Part 3f: the TRUE Trading P&L (ledger) headlines the daily summary, not the price estimate.
-    return "AlbionBase Daily -- Trading P&L " + _money(portfolio["trading_pnl"], plus=True), "\n".join(lines)
+    try:
+        import trading_mode
+        mode = trading_mode.read_mode()
+    except Exception:
+        mode = "DEMO"
+    _short = {"US500": "US"}
+    per = " | ".join("%s: %s" % (_short.get(r["name"], r["name"]), _money(r["today"], plus=True)) for r in rows)
+    msg = "%s\nToday: %s\nPot: %s | Trading P&L: %s" % (
+        per, _money(portfolio["today"], plus=True), _money(portfolio["total_pot"]),
+        _money(portfolio["trading_pnl"], plus=True))
+    # Part 2/4a: [DEMO]/[LIVE]-marked, ledger Trading P&L headlines. Low priority (Part 4d).
+    return "AlbionBase Daily Summary 📊 [%s]" % mode, msg
 
 def _daily_summary_scheduler():
     import time
