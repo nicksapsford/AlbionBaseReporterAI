@@ -539,8 +539,14 @@ def gaius_data():
 
 # ── daily summary Pushover (brief Part 5: ONE 21:00 UTC message across all instruments) ────────
 def _pushover_send(title, message, priority=-1):
-    """Daily summary is Low priority (Part 4d). Gated by LIVE_NOTIFICATIONS + creds."""
+    """Daily summary is Low priority (Part 4d). Gated by LIVE_NOTIFICATIONS + trading_mode==LIVE (K1 live only)."""
     if not LIVE_NOTIFICATIONS or not PUSHOVER_USER_KEY or not PUSHOVER_API_TOKEN:
+        return False
+    try:                                  # STANDING RULE: Pushover ONLY in LIVE mode; DEMO/unknown = silent
+        import trading_mode as _tm
+        if _tm.read_mode() != "LIVE":
+            return False
+    except Exception:
         return False
     try:
         import urllib.parse
