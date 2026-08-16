@@ -54,6 +54,8 @@ ALBIONBASE_INSTRUMENTS = [
     # AlbionBase runs 3 instruments: Gold, Oil, US500. FTSEBaseAI repo archived.
     {"name": "US500", "ticker": "US500", "port": 5034, "currency": "USD", "emoji": "\U0001F1FA\U0001F1F8",
      "live_ip": _HOST, "repo": "USBaseAI",   "log_csv": "us_trades.csv"},
+    {"name": "AUDUSD", "ticker": "AUDUSD", "port": 5032, "currency": "GBP", "emoji": "\U0001F1E6\U0001F1FA",
+     "live_ip": _HOST, "repo": "AUDUSDBaseAI", "log_csv": "audusd_trades.csv"},
     # ---- Future instruments: add here ONLY (one dict) ----
     # {"name": "DAX", "ticker": "DAX", "port": 5037, "currency": "EUR", "emoji": "\U0001F1E9\U0001F1EA",
     #  "live_ip": _HOST, "repo": "DAXBaseAI", "log_csv": "dax_trades.csv"},
