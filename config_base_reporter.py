@@ -48,10 +48,9 @@ _LOGS_BASE = os.getenv("ALBIONBASE_LOGS_BASE", r"C:\Users\abc\Desktop\AlbionBase
 ALBIONBASE_INSTRUMENTS = [
     {"name": "Gold",  "ticker": "GOLD",  "port": 5033, "currency": "USD", "emoji": "\U0001F947",
      "live_ip": _HOST, "repo": "GoldBaseAI", "log_csv": "gold_trades.csv"},
-    {"name": "Oil",   "ticker": "BRENT", "port": 5035, "currency": "USD", "emoji": "\U0001F6E2️",
-     "live_ip": _HOST, "repo": "OilBaseAI",  "log_csv": "oil_trades.csv"},
+    # OilBase REMOVED 17 Aug 2026 -- SSL/RSI/TMO has no edge on Oil (backtest PF 0.53/0.96); stopped + repo archived.
     # FTSE REMOVED 11 Aug 2026 -- £2/pt on UK100 margin exceeds the £3,000 pot at 2% risk (see changelog).
-    # AlbionBase runs 3 instruments: Gold, Oil, US500. FTSEBaseAI repo archived.
+    # AlbionBase runs 3 instruments: Gold, US500, AUDUSD. Oil + FTSE repos archived.
     {"name": "US500", "ticker": "US500", "port": 5034, "currency": "USD", "emoji": "\U0001F1FA\U0001F1F8",
      "live_ip": _HOST, "repo": "USBaseAI",   "log_csv": "us_trades.csv"},
     {"name": "AUDUSD", "ticker": "AUDUSD", "port": 5032, "currency": "GBP", "emoji": "\U0001F1E6\U0001F1FA",
