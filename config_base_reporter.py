@@ -49,10 +49,11 @@ ALBIONBASE_INSTRUMENTS = [
     {"name": "Gold",  "ticker": "GOLD",  "port": 5033, "currency": "USD", "emoji": "\U0001F947",
      "live_ip": _HOST, "repo": "GoldBaseAI", "log_csv": "gold_trades.csv"},
     # OilBase REMOVED 17 Aug 2026 -- SSL/RSI/TMO has no edge on Oil (backtest PF 0.53/0.96); stopped + repo archived.
+    # US500/USBase REMOVED 20 Aug 2026 -- the PF 1.49 that justified its live slot was a 1-bar lookahead
+    #   artifact; honest re-validation is PF 0.97 net-negative (fails the same standard that demoted Oil).
+    #   Stopped on K1 + Dell, repo archived. US500 data collection continues on USBenchmark only.
     # FTSE REMOVED 11 Aug 2026 -- £2/pt on UK100 margin exceeds the £3,000 pot at 2% risk (see changelog).
-    # AlbionBase runs 3 instruments: Gold, US500, AUDUSD. Oil + FTSE repos archived.
-    {"name": "US500", "ticker": "US500", "port": 5034, "currency": "USD", "emoji": "\U0001F1FA\U0001F1F8",
-     "live_ip": _HOST, "repo": "USBaseAI",   "log_csv": "us_trades.csv"},
+    # AlbionBase runs 2 instruments: Gold, AUDUSD. Oil + US500 + FTSE repos archived.
     {"name": "AUDUSD", "ticker": "AUDUSD", "port": 5032, "currency": "GBP", "emoji": "\U0001F1E6\U0001F1FA",
      "live_ip": _HOST, "repo": "AUDUSDBaseAI", "log_csv": "audusd_trades.csv"},
     # ---- Future instruments: add here ONLY (one dict) ----
