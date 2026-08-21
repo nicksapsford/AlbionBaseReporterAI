@@ -668,6 +668,7 @@ def instrument_page(slug):
 
 if __name__ == "__main__":
     import threading
-    threading.Thread(target=_scheduler, daemon=True).start()   # 21:00 summary + 07:00/19:00 health pings
+    threading.Thread(target=_scheduler, daemon=True).start()          # 21:00 summary + 07:00/19:00 health pings
+    threading.Thread(target=health.heartbeat_loop, daemon=True).start()  # dead-man's switch (own thread; no-op if HEARTBEAT_URL blank)
     print("AlbionBase Reporter v%s -- Command Centre on http://localhost:%d" % (VERSION, PORT))
     app.run(host="0.0.0.0", port=PORT, threaded=True)

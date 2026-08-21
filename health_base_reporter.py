@@ -32,6 +32,55 @@ def _iso(dt): return dt.strftime("%Y-%m-%dT%H:%M:%SZ") if dt else None
 _BROKER_LAST_OK = {"ts": None}   # persists across calls within the process
 
 
+# ── dead-man's switch: outbound "still alive" heartbeat (NO account data). Never raises; hard-bounded. ─────────
+_HB = {"last_attempt": None, "last_ok": None, "last_error": None, "ok": None}
+
+def heartbeat_once():
+    """One outbound ping to HEARTBEAT_URL. BARE signal -- no body, no account data, no creds leave the process.
+    Hard timeout so a hanging endpoint cannot block beyond it. Swallows EVERYTHING -- can never raise."""
+    url = cfg.HEARTBEAT_URL
+    if not url:
+        return
+    _HB["last_attempt"] = _iso(_now())
+    try:
+        if _rq is None:
+            raise RuntimeError("requests unavailable")
+        # NO payload -> nothing about the account/positions/balance ever leaves. timeout = (connect, read).
+        to = (float(cfg.HEARTBEAT_TIMEOUT_SEC), float(cfg.HEARTBEAT_TIMEOUT_SEC))
+        r = (_rq.post(url, timeout=to) if cfg.HEARTBEAT_METHOD == "POST" else _rq.get(url, timeout=to))
+        r.raise_for_status()
+        _HB["ok"] = True; _HB["last_ok"] = _iso(_now()); _HB["last_error"] = None
+    except Exception as exc:
+        _HB["ok"] = False; _HB["last_error"] = str(exc)[:140]
+
+def heartbeat_status():
+    st = {"enabled": bool(cfg.HEARTBEAT_URL), "last_attempt": _HB["last_attempt"], "last_ok": _HB["last_ok"],
+          "last_error": _HB["last_error"], "ok": _HB["ok"], "stale": False}
+    if st["enabled"]:                                  # stale = enabled but no success within 2x the interval
+        if not st["last_ok"]:
+            st["stale"] = True
+        else:
+            try:
+                last = datetime.strptime(st["last_ok"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_UTC)
+                st["stale"] = (_now() - last).total_seconds() > 2 * cfg.HEARTBEAT_INTERVAL_MIN * 60
+            except Exception:
+                st["stale"] = True
+    return st
+
+def heartbeat_loop():
+    """OWN daemon thread. Each iteration guarded so it never dies and never raises into anything else."""
+    import time
+    while True:
+        try:
+            heartbeat_once()
+        except Exception:
+            pass
+        try:
+            time.sleep(max(60.0, float(cfg.HEARTBEAT_INTERVAL_MIN) * 60.0))
+        except Exception:
+            time.sleep(900.0)
+
+
 # ── tiny READ-ONLY Capital.com client (auth + positions + balance) ───────────────────────────────
 class _CapRO:
     def __init__(self, mode):
@@ -316,6 +365,12 @@ def collect_health():
         pend = _reboot_pending(); h["windows_reboot_pending"] = pend
         if pend:
             h["info"].append("Windows restart pending")
+
+        # dead-man's switch status (1c: if the alarm itself is failing, SAY so -- never trust a silent alarm)
+        hb = heartbeat_status(); h["heartbeat"] = hb
+        if hb["enabled"] and hb["stale"]:
+            h["alerts"].append("HEARTBEAT: dead-man's switch FAILING (last ok %s) -- the ALARM ITSELF is broken"
+                               % (hb["last_ok"] or "never"))
     except Exception as exc:
         h["error"] = "collect_health error: %s" % str(exc)[:150]
     h["priority"] = 1 if h["alerts"] else 0    # HIGH iff a HIGH-severity alert fired
@@ -359,4 +414,8 @@ def format_health(h):
     lines.append("Code: GoldBase %s · engine %s%s" % (cc, eng, ecc))
     if h.get("windows_reboot_pending"):
         lines.append("Windows: RESTART PENDING")
+    hb = h.get("heartbeat", {})
+    if hb.get("enabled"):
+        lines.append("Heartbeat: " + ("ok (last %s)" % hb.get("last_ok") if not hb.get("stale")
+                                      else "FAILING (last ok %s)" % (hb.get("last_ok") or "never")))
     return title, "\n".join(lines), pri

@@ -48,6 +48,19 @@ HEALTH_RECENT_BOOT_HOURS = float(os.getenv("HEALTH_RECENT_BOOT_HOURS", "3"))  # 
 CAPITALCOM_DEMO_BASE_URL = "https://demo-api-capital.backend-capital.com/api/v1"
 CAPITALCOM_LIVE_BASE_URL = "https://api-capital.backend-capital.com/api/v1"
 
+# ── Dead-man's switch (brief 21 Aug 2026, Nick-approved). An OUTBOUND-ONLY periodic "still alive" ping so
+# SILENCE becomes the alarm -- the health ping dies with K1, this does not (an external service alerts Nick if
+# the pings STOP). The ping is BARE: no account data, no balances, no positions, no credentials -- just a GET/
+# POST to a secret URL (the URL itself is the only secret, from .env, gitignored). Disabled when HEARTBEAT_URL
+# is blank. Runs in its OWN daemon thread, every call wrapped + hard-timeout, so a dead/hanging endpoint can
+# NEVER stall the Reporter's scheduler (and the Reporter is a separate process from the engine -- it cannot
+# reach the trading loop at all). Expects a healthcheck-style ping URL (e.g. healthchecks.io / Better Stack
+# heartbeat / Cronitor / Dead Man's Snitch): a unique URL you GET on a schedule; the service alarms if pings stop.
+HEARTBEAT_URL          = os.getenv("HEARTBEAT_URL", "").strip()
+HEARTBEAT_INTERVAL_MIN = float(os.getenv("HEARTBEAT_INTERVAL_MIN", "15"))
+HEARTBEAT_TIMEOUT_SEC  = float(os.getenv("HEARTBEAT_TIMEOUT_SEC", "8"))
+HEARTBEAT_METHOD       = os.getenv("HEARTBEAT_METHOD", "GET").strip().upper()
+
 # Environment label (Part 2a): TEST on the Dell (amber), LIVE on the K1 (green). Set ENV_LABEL in .env.
 ENV_LABEL = os.getenv("ENV_LABEL", "TEST").strip().upper()
 
