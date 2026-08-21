@@ -377,6 +377,27 @@ def collect_health():
     return h
 
 
+_health_cache = {"ts": 0.0, "data": None}
+
+def get_health(max_age=None):
+    """Cached wrapper for the /api/health ENDPOINT so rapid polling can't multiply the 3 Capital.com calls a
+    fresh collection makes. Scheduled pushes call collect_health() directly (always fresh, 2x/day). Never raises."""
+    import time as _t
+    try:
+        if max_age is None:
+            max_age = float(cfg.HEALTH_CACHE_SEC)
+        now = _t.monotonic()
+        if _health_cache["data"] is not None and (now - _health_cache["ts"]) < max_age:
+            d = dict(_health_cache["data"]); d["cached"] = True; d["cache_age_sec"] = round(now - _health_cache["ts"], 1)
+            return d
+        d = collect_health()
+        _health_cache["ts"] = now; _health_cache["data"] = d
+        d = dict(d); d["cached"] = False; d["cache_age_sec"] = 0.0
+        return d
+    except Exception as exc:
+        return {"error": "get_health: %s" % str(exc)[:150]}
+
+
 def format_health(h):
     """Phone-friendly Pushover (title + message + priority). Most alarming first."""
     mode = h.get("mode", "?"); pri = h.get("priority", 0)

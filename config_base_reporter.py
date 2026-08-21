@@ -45,6 +45,9 @@ HEALTH_EVENING_HOUR_UTC  = int(os.getenv("HEALTH_EVENING_HOUR_UTC", "19"))   # b
 HEALTH_PROCS             = os.getenv("HEALTH_PROCS", "GoldBase=5033,RoundTableBase=5036,Reporter=5041")
 HEALTH_KILL_SWITCH_GBP   = float(os.getenv("HEALTH_KILL_SWITCH_GBP", "180"))  # daily-loss kill switch (headroom)
 HEALTH_RECENT_BOOT_HOURS = float(os.getenv("HEALTH_RECENT_BOOT_HOURS", "3"))  # uptime under this = flag a reboot
+# One health collection makes 3 Capital.com calls (session-auth + /positions + /accounts). /api/health is cached
+# for this many seconds so it CANNOT be hammered into multiplying broker calls (endpoint-abuse guard).
+HEALTH_CACHE_SEC         = float(os.getenv("HEALTH_CACHE_SEC", "30"))
 CAPITALCOM_DEMO_BASE_URL = "https://demo-api-capital.backend-capital.com/api/v1"
 CAPITALCOM_LIVE_BASE_URL = "https://api-capital.backend-capital.com/api/v1"
 

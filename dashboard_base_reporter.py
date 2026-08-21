@@ -625,7 +625,7 @@ def api_systems():
 @app.route("/api/health")
 def api_health():
     try:
-        h = health.collect_health()
+        h = health.get_health()     # cached (HEALTH_CACHE_SEC) so the endpoint can't multiply broker calls
         h["reporter_version"] = VERSION
         return Response(json.dumps(h, default=str, indent=2), mimetype="application/json")
     except Exception as exc:
