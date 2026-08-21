@@ -22,7 +22,9 @@ from config_base_reporter import (
     FETCH_TIMEOUT_SEC, state_url, log_path,
     LIVE_NOTIFICATIONS, PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN, DAILY_SUMMARY_HOUR_UTC,
     ENV_LABEL,
+    HEALTH_NOTIFICATIONS, HEALTH_MORNING_HOUR_UTC, HEALTH_EVENING_HOUR_UTC,
 )
+import health_base_reporter as health
 
 # Part 4c -- P&L epoch (Stage-B cutover). CSV rows dated before this are the retired Stanley paper-trading
 # era and are excluded from every P&L figure below. Shared source of truth in trading_mode (vendored).
@@ -557,6 +559,22 @@ def _pushover_send(title, message, priority=-1):
     except Exception:
         return False
 
+def _health_push(title, message, priority=0):
+    """Desk-HEALTH push. UNLIKE _pushover_send this is NOT gated on trading_mode -- its whole purpose is to
+    report when the desk is in DEMO. Gated only on HEALTH_NOTIFICATIONS + creds (the K1 reporter sets
+    HEALTH_NOTIFICATIONS=True; a paper/Dell reporter leaves it False -> silent). Never raises."""
+    if not HEALTH_NOTIFICATIONS or not PUSHOVER_USER_KEY or not PUSHOVER_API_TOKEN:
+        return False
+    try:
+        import urllib.parse, urllib.request
+        data = urllib.parse.urlencode({"token": PUSHOVER_API_TOKEN, "user": PUSHOVER_USER_KEY,
+                                       "title": title, "message": message, "priority": priority}).encode()
+        urllib.request.urlopen("https://api.pushover.net/1/messages.json", data=data, timeout=6)
+        return True
+    except Exception:
+        return False
+
+
 def build_daily_summary():
     rows, portfolio, _ = build_report()
     try:
@@ -572,14 +590,21 @@ def build_daily_summary():
     # Part 2/4a: [DEMO]/[LIVE]-marked, ledger Trading P&L headlines. Low priority (Part 4d).
     return "AlbionBase Daily Summary 📊 [%s]" % mode, msg
 
-def _daily_summary_scheduler():
+def _scheduler():
+    """ONE background thread: the 21:00 trading summary AND the 07:00 / 19:00 health pings -- extends the
+    existing machinery, no parallel scheduler. Each fire is independently guarded so a failure never stops
+    the loop, and neither push can raise into anything else."""
     import time
-    last = None
+    last_daily = None; last_health = None
     while True:
         try:
-            now = datetime.now(timezone.utc); key = now.strftime("%Y-%m-%d")
-            if now.hour == DAILY_SUMMARY_HOUR_UTC and last != key:
-                t, m = build_daily_summary(); _pushover_send(t, m); last = key
+            now = datetime.now(timezone.utc); day = now.strftime("%Y-%m-%d")
+            if now.hour == DAILY_SUMMARY_HOUR_UTC and last_daily != day:
+                t, m = build_daily_summary(); _pushover_send(t, m); last_daily = day
+            hkey = "%s-%02d" % (day, now.hour)
+            if now.hour in (HEALTH_MORNING_HOUR_UTC, HEALTH_EVENING_HOUR_UTC) and last_health != hkey:
+                _h = health.collect_health(); _t, _m, _pri = health.format_health(_h)
+                _health_push(_t, _m, _pri); last_health = hkey
         except Exception:
             pass
         time.sleep(30)
@@ -599,8 +624,13 @@ def api_systems():
 
 @app.route("/api/health")
 def api_health():
-    return Response(json.dumps({"status": "ok", "system": "AlbionBaseReporter",
-                                "version": VERSION, "port": PORT}), mimetype="application/json")
+    try:
+        h = health.collect_health()
+        h["reporter_version"] = VERSION
+        return Response(json.dumps(h, default=str, indent=2), mimetype="application/json")
+    except Exception as exc:
+        return Response(json.dumps({"error": str(exc), "system": "AlbionBaseReporter", "version": VERSION}),
+                        status=500, mimetype="application/json")
 
 @app.route("/performance")
 def performance():
@@ -638,6 +668,6 @@ def instrument_page(slug):
 
 if __name__ == "__main__":
     import threading
-    threading.Thread(target=_daily_summary_scheduler, daemon=True).start()   # 21:00 UTC daily Pushover
+    threading.Thread(target=_scheduler, daemon=True).start()   # 21:00 summary + 07:00/19:00 health pings
     print("AlbionBase Reporter v%s -- Command Centre on http://localhost:%d" % (VERSION, PORT))
     app.run(host="0.0.0.0", port=PORT, threaded=True)

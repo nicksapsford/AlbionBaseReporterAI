@@ -35,6 +35,19 @@ PUSHOVER_USER_KEY      = os.getenv("PUSHOVER_USER_KEY", "")
 PUSHOVER_API_TOKEN     = os.getenv("PUSHOVER_API_TOKEN", "")
 DAILY_SUMMARY_HOUR_UTC = 21
 
+# ── Desk health ping (brief 21 Aug 2026) -- "is the DESK alive and in the right state", separate from the
+# 21:00 trading summary. Fires REGARDLESS of DEMO/LIVE (its whole point is to shout when the desk is in DEMO),
+# so it is gated on its OWN flag, NOT trading_mode. Off by default (silent on a paper/Dell reporter); set
+# HEALTH_NOTIFICATIONS=True on the K1 reporter. All times UTC, all thresholds .env-configurable.
+HEALTH_NOTIFICATIONS     = os.getenv("HEALTH_NOTIFICATIONS", "False").strip().lower() in ("1", "true", "yes", "on")
+HEALTH_MORNING_HOUR_UTC  = int(os.getenv("HEALTH_MORNING_HOUR_UTC", "7"))    # overnight-was-fine push
+HEALTH_EVENING_HOUR_UTC  = int(os.getenv("HEALTH_EVENING_HOUR_UTC", "19"))   # before Nick stops for the day
+HEALTH_PROCS             = os.getenv("HEALTH_PROCS", "GoldBase=5033,RoundTableBase=5036,Reporter=5041")
+HEALTH_KILL_SWITCH_GBP   = float(os.getenv("HEALTH_KILL_SWITCH_GBP", "180"))  # daily-loss kill switch (headroom)
+HEALTH_RECENT_BOOT_HOURS = float(os.getenv("HEALTH_RECENT_BOOT_HOURS", "3"))  # uptime under this = flag a reboot
+CAPITALCOM_DEMO_BASE_URL = "https://demo-api-capital.backend-capital.com/api/v1"
+CAPITALCOM_LIVE_BASE_URL = "https://api-capital.backend-capital.com/api/v1"
+
 # Environment label (Part 2a): TEST on the Dell (amber), LIVE on the K1 (green). Set ENV_LABEL in .env.
 ENV_LABEL = os.getenv("ENV_LABEL", "TEST").strip().upper()
 
